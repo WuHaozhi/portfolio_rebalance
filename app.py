@@ -202,10 +202,10 @@ QTreeWidget {{
     selection-background-color:{C_SEL}; selection-color:{C_TEXT}; outline:0;
     show-decoration-selected:1;
 }}
-QTreeWidget::item {{ height:46px; border-right:1px solid {C_GRIDLINE}; }}
+QTreeWidget::item {{ height:35px; border-right:1px solid {C_GRIDLINE}; }}
 QTreeWidget::item:selected {{ background:{C_SEL}; color:{C_TEXT}; }}
 QHeaderView::section {{
-    background:{C_HEADER}; color:{C_DIM}; padding:11px 8px; border:0px;
+    background:{C_HEADER}; color:{C_DIM}; padding:8px 8px; border:0px;
     border-right:1px solid {C_GRIDLINE}; border-bottom:1px solid {C_BORDER};
     font-weight:600; font-size:13px;
 }}
