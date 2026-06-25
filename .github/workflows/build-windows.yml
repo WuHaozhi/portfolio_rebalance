@@ -60,7 +60,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 调仓工具-windows-安装包
-          path: dist/portfolio_rebalance_setup_v1.1.5.exe
+          path: dist/portfolio_rebalance_setup_v1.1.6.exe
           if-no-files-found: error
       - name: 发布到 Release（打 tag 时）
         if: startsWith(github.ref, 'refs/tags/')
@@ -68,7 +68,7 @@ jobs:
         with:
           files: |
             dist/portfolio_rebalance.exe
-            dist/portfolio_rebalance_setup_v1.1.5.exe
+            dist/portfolio_rebalance_setup_v1.1.6.exe
 
   build-macos:
     runs-on: macos-latest

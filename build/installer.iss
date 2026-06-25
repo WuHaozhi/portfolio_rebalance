@@ -2,11 +2,11 @@
 ; 用法（在 Windows 上，需先装 Inno Setup 6 https://jrsoftware.org/isdl.php）：
 ;   1) 先 pyinstaller build\调仓工具.spec --noconfirm --clean  生成 dist\portfolio_rebalance.exe
 ;   2) ISCC build\installer.iss
-;   产物：dist\portfolio_rebalance_setup_v1.1.5.exe（双击安装，带开始菜单/桌面快捷方式/卸载）
+;   产物：dist\portfolio_rebalance_setup_v1.1.6.exe（双击安装，带开始菜单/桌面快捷方式/卸载）
 ; 注：文件名用 ASCII（GitHub Release 会吞掉中文附件名）；安装后的程序名/快捷方式仍是中文「调仓工具」。
 
 #define MyAppName "调仓工具"
-#define MyAppVersion "1.1.5"
+#define MyAppVersion "1.1.6"
 #define MyAppPublisher "Portfolio Adjust"
 #define MyAppExeName "portfolio_rebalance.exe"
 
@@ -27,9 +27,9 @@ WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64
 ; 安装到 Program Files 需要管理员；如想免管理员装到用户目录，把上面 DefaultDirName 改成 {userpf}\{#MyAppName} 并设 PrivilegesRequired=lowest
 PrivilegesRequired=admin
-; 自动更新时静默升级会用到：升级时自动关闭正在运行的旧程序（配置/新增证券存在注册表与用户目录，不在安装目录，不受影响）
-CloseApplications=yes
-RestartApplications=no
+; 不用 RestartManager 自动关程序（它对 Qt 程序不可靠，会弹"无法关闭应用"错误）；
+; 改为在 [Code] 的 PrepareToInstall 里用 taskkill 强制关闭后再装（见文件末尾）。
+CloseApplications=no
 
 [Languages]
 ; 用 Inno Setup 自带的英文 Default.isl（向导是英文，软件本身仍是中文）；
@@ -56,3 +56,22 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 ; 装完自动启动（去掉 skipifsilent，使自动更新的静默安装也会重新拉起程序，做到"无感"重开）；
 ; runasoriginaluser：以普通用户身份重开，而非继承安装器的管理员权限。
 Filename: "{app}\{#MyAppExeName}"; Description: "立即运行 {#MyAppName}"; Flags: nowait postinstall runasoriginaluser
+
+[Code]
+procedure KillApp(const ExeName: String);
+var
+  RC: Integer;
+begin
+  Exec(ExpandConstant('{sys}\taskkill.exe'), '/f /im "' + ExeName + '"',
+       '', SW_HIDE, ewWaitUntilTerminated, RC);
+end;
+
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+begin
+  // 安装前强制关闭正在运行的程序，确保能覆盖 exe（RestartManager 关 Qt 程序不可靠）。
+  // 配置/新增证券在注册表与用户目录、不在安装目录，强制关闭不会丢数据。
+  KillApp('portfolio_rebalance.exe');
+  KillApp('调仓工具.exe');
+  Sleep(800);   // 等内核完全释放文件句柄，再开始覆盖
+  Result := '';
+end;
