@@ -299,6 +299,7 @@ ICON_SVG = """<svg width="110" height="110" viewBox="0 0 110 110" xmlns="http://
   <rect x="44" y="58" width="22" height="22" rx="3.5" transform="rotate(45 55 69)" fill="#60a5fa"/>
 </svg>"""
 
+# 横版品牌 Logo（备用）：v1.2.1 起工具栏不再放它（标题栏已有图标+标题，避免重复）；保留以备界面他处使用。
 LOGO_SVG = """<svg width="360" height="64" viewBox="0 0 360 64" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="lk-unit" x1="0" y1="0" x2="1" y2="1">
@@ -921,10 +922,6 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(central); root.setContentsMargins(14, 12, 14, 12); root.setSpacing(10)
 
         bar = QHBoxLayout(); bar.setSpacing(10)
-        self.logo = QLabel()                                  # 品牌横版 Logo（最左，常驻）
-        self.logo.setPixmap(_svg_pixmap(LOGO_SVG, 180, 32))
-        bar.addWidget(self.logo)
-        bar.addSpacing(10)
         self.btn_open = QPushButton("📁  选择产品文件夹")     # 设置入口（左侧，与右侧操作区分开）
         self.btn_open.setCursor(Qt.PointingHandCursor)
         self.btn_open.clicked.connect(self.on_open_folder)
