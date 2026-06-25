@@ -157,8 +157,11 @@ C_GROUP = "#181d27"       # 二级 交易组行底色
 C_HEADER = "#161a22"
 C_BORDER = "#262c38"
 C_GRIDLINE = "#1e232d"
-C_TEXT = "#e8eaee"
-C_DIM = "#7e8794"
+C_TEXT = "#f3f5f8"        # 主文字：更亮，长时间查看更清晰、不费眼
+C_DIM = "#9aa6b6"         # 次要文字（价格/表头/占位）：从灰提亮，价格列也看得清
+C_CHIP_BG = "#13314e"     # 顶部「N 个产品」徽标底
+C_CHIP_FG = "#74c6ff"     # 顶部徽标文字
+C_CHIP_BD = "#1f4a72"     # 顶部徽标边
 C_SEL = "#15324f"
 C_BUY = "#2f9bff"
 C_SELL = "#f6465d"
@@ -174,25 +177,37 @@ QToolTip {{ background:{C_PANEL}; color:{C_TEXT}; border:1px solid {C_BORDER}; }
 
 QPushButton {{
     background:{C_PANEL}; color:{C_TEXT}; border:1px solid {C_BORDER};
-    padding:7px 16px; border-radius:6px;
+    padding:10px 18px; border-radius:6px;
 }}
 QPushButton:hover {{ background:#222734; border-color:#39404e; }}
 QPushButton:pressed {{ background:#12151c; }}
-QPushButton#primary {{ background:{C_PRIMARY}; color:#fff; border:none; font-weight:600; padding:7px 22px; }}
+/* 主操作（预览）：实心蓝，最高优先级 */
+QPushButton#primary {{ background:{C_PRIMARY}; color:#fff; border:none; font-weight:600; padding:10px 26px; }}
 QPushButton#primary:hover {{ background:#3a8dff; }}
+/* 次要操作（新增产品）：蓝色描边，介于主操作与工具之间 */
+QPushButton#accent {{ background:transparent; color:{C_BUY}; border:1px solid {C_BUY}; font-weight:600; }}
+QPushButton#accent:hover {{ background:rgba(47,155,255,0.14); }}
+/* 低频工具（更多）：幽灵按钮，最弱存在感 */
+QPushButton#ghost {{ background:transparent; color:{C_DIM}; border:1px solid transparent; }}
+QPushButton#ghost:hover {{ background:{C_PANEL}; border-color:{C_BORDER}; color:{C_TEXT}; }}
+/* 顶部「N 个产品」数据徽标 */
+QLabel#countChip {{
+    background:{C_CHIP_BG}; color:{C_CHIP_FG}; border:1px solid {C_CHIP_BD};
+    border-radius:13px; padding:6px 14px; font-weight:600; font-size:13px;
+}}
 
 QTreeWidget {{
     background:{C_BG}; border:1px solid {C_BORDER}; border-radius:6px;
-    gridline-color:{C_GRIDLINE};
+    gridline-color:{C_GRIDLINE}; font-size:14px;
     selection-background-color:{C_SEL}; selection-color:{C_TEXT}; outline:0;
     show-decoration-selected:1;
 }}
-QTreeWidget::item {{ height:30px; border-right:1px solid {C_GRIDLINE}; }}
+QTreeWidget::item {{ height:46px; border-right:1px solid {C_GRIDLINE}; }}
 QTreeWidget::item:selected {{ background:{C_SEL}; color:{C_TEXT}; }}
 QHeaderView::section {{
-    background:{C_HEADER}; color:{C_DIM}; padding:8px 8px; border:0px;
+    background:{C_HEADER}; color:{C_DIM}; padding:11px 8px; border:0px;
     border-right:1px solid {C_GRIDLINE}; border-bottom:1px solid {C_BORDER};
-    font-weight:600;
+    font-weight:600; font-size:13px;
 }}
 QHeaderView::section:last {{ border-right:0; }}
 
@@ -693,11 +708,8 @@ class MainWindow(QMainWindow):
         if self._migrated and self.custom:     # 旧 QSettings 数据迁移后立即落盘一次
             self._save_custom()
         self._build_ui()
-        last = self.settings.value("last_folder", "", str)
-        if last and os.path.isdir(last):
-            self._load_folder(last)
-        elif os.path.isdir(os.path.join(os.getcwd(), "product")):
-            self._load_folder(os.path.join(os.getcwd(), "product"))
+        # 启动不自动加载产品：等用户主动点「选择产品文件夹」后再显示「已加载 N 个产品」。
+        # 上次用过的目录仍记住，作为下次选择对话框的默认起始位置（见 on_open_folder）。
 
         # 更新检查器：启动不联网，仅在经理点「检查更新」时才联网一次
         self._updater = UpdateChecker(self)
@@ -793,20 +805,28 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(central); root.setContentsMargins(14, 12, 14, 12); root.setSpacing(10)
 
         bar = QHBoxLayout(); bar.setSpacing(10)
-        self.btn_open = QPushButton("📁 选择产品文件夹")
+        self.btn_open = QPushButton("📁  选择产品文件夹")     # 设置入口（左侧，与右侧操作区分开）
+        self.btn_open.setCursor(Qt.PointingHandCursor)
         self.btn_open.clicked.connect(self.on_open_folder)
-        self.lbl_count = QLabel("")
+        self.lbl_count = QLabel("")                          # 数据徽标：加载后显示「📦 N 个产品」
+        self.lbl_count.setObjectName("countChip")
+        self.lbl_count.hide()                                # 未加载前不显示
         bar.addWidget(self.btn_open)
         bar.addWidget(self.lbl_count)
         bar.addStretch(1)
-        self.btn_more = QPushButton("更多")            # 低频工具：检查更新/关于（弹出菜单）
+        self.btn_more = QPushButton("更多")            # 低频工具：检查更新/关于 —— 幽灵按钮，存在感最弱
+        self.btn_more.setObjectName("ghost")
+        self.btn_more.setCursor(Qt.PointingHandCursor)
         self.btn_more.clicked.connect(self._show_more_menu)
         bar.addWidget(self.btn_more)
-        self.btn_new = QPushButton("新增产品")        # 常驻入口，表满了也能加（不依赖右键空白）
+        self.btn_new = QPushButton("＋ 新增产品")      # 常驻入口 —— 蓝色描边，次要操作
+        self.btn_new.setObjectName("accent")
+        self.btn_new.setCursor(Qt.PointingHandCursor)
         self.btn_new.clicked.connect(self._add_product)
         bar.addWidget(self.btn_new)
-        self.btn_preview = QPushButton("预览")
+        self.btn_preview = QPushButton("预览")          # 主操作 —— 实心蓝
         self.btn_preview.setObjectName("primary")
+        self.btn_preview.setCursor(Qt.PointingHandCursor)
         self.btn_preview.clicked.connect(self.on_preview)
         bar.addWidget(self.btn_preview)
         root.addLayout(bar)
@@ -846,9 +866,20 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------- 文件夹
     def on_open_folder(self):
-        folder = QFileDialog.getExistingDirectory(self, "选择 product 文件夹", self.folder or os.getcwd())
+        start = self.folder or self.settings.value("last_folder", "", str) or os.getcwd()
+        folder = QFileDialog.getExistingDirectory(self, "选择 product 文件夹", start)
         if folder:
             self._load_folder(folder)
+
+    def _update_count_chip(self):
+        """更新顶部「N 个产品」数据徽标：未加载则隐藏；加载后显示数量，悬停看产品名清单。"""
+        n = len(self.products)
+        if n:
+            self.lbl_count.setText(f"📦  {n} 个产品")
+            self.lbl_count.setToolTip("已加载：\n" + "\n".join(f"· {p.name}" for p in self.products))
+            self.lbl_count.show()
+        else:
+            self.lbl_count.hide()
 
     def _load_folder(self, folder):
         try:
@@ -861,7 +892,7 @@ class MainWindow(QMainWindow):
         self.products = products
         self.merged = merged_security_pool(products)
         self.settings.setValue("last_folder", folder)
-        self.lbl_count.setText(f"已加载 {len(products)} 个产品")
+        self._update_count_chip()
         self.tree.update_overlay()       # 空表则显示虚线「＋新增产品」按钮（不自动建默认行）
         wlines = self._product_warning_lines(products)
         if wlines:
@@ -885,7 +916,7 @@ class MainWindow(QMainWindow):
         before = {p.name for p in self.products}
         self.products = products
         self.merged = merged_security_pool(products)
-        self.lbl_count.setText(f"已加载 {len(products)} 个产品")
+        self._update_count_chip()
         names = self._product_names()
         for i in range(self.tree.topLevelItemCount()):
             cb = self.tree.itemWidget(self.tree.topLevelItem(i), COL_PRODUCT)
