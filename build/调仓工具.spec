@@ -13,6 +13,10 @@ block_cipher = None
 # 项目根目录 = 本 spec 文件所在目录(build/)的上一级，保证从任意 CWD 运行都能找到源码
 ROOT = os.path.dirname(os.path.abspath(SPECPATH))
 
+# 打包图标（由 build/make_icons.py 从 app.ICON_SVG 生成，置于 build/ 下）
+ICON_ICO = os.path.join(SPECPATH, "icon.ico")     # Windows exe 文件图标
+ICON_ICNS = os.path.join(SPECPATH, "icon.icns")   # macOS .app 图标
+
 # 仅打包用到的 Qt 模块，减小体积、加快启动
 EXCLUDES = [
     "PySide6.QtNetwork", "PySide6.QtQml", "PySide6.QtQuick",
@@ -67,12 +71,12 @@ if IS_MAC:
     app = BUNDLE(
         coll,
         name="调仓工具.app",
-        icon=None,          # 如需图标：build/icon.icns 并改为 icon="build/icon.icns"
+        icon=ICON_ICNS,
         bundle_identifier="com.portfolioadjust.tool",
         info_plist={
             "CFBundleName": "调仓工具",
             "CFBundleDisplayName": "批量调仓下单工具",
-            "CFBundleShortVersionString": "1.1.9",
+            "CFBundleShortVersionString": "1.2.0",
             "NSHighResolutionCapable": True,
         },
     )
@@ -89,5 +93,5 @@ else:
         console=False,          # 不弹黑色命令行窗口
         disable_windowed_traceback=False,
         target_arch=None, codesign_identity=None, entitlements_file=None,
-        icon=None,              # 如需图标：放 build/icon.ico 并改为 icon="build/icon.ico"
+        icon=ICON_ICO,
     )

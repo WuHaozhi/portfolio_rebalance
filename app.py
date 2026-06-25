@@ -18,8 +18,9 @@ import sys
 import traceback
 
 from PySide6.QtCore import (Qt, QSettings, QObject, Signal, QUrl,
-                            QTranslator, QLibraryInfo, QLocale)
+                            QTranslator, QLibraryInfo, QLocale, QByteArray)
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPen, QPixmap
+from PySide6.QtSvg import QSvgRenderer
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QComboBox, QDialog,
     QDialogButtonBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
@@ -274,6 +275,69 @@ def _to_float(s):
 def _to_int(s):
     f = _to_float(s)
     return int(round(f)) if f is not None else None
+
+
+# ---------------------------------------------------------------------------
+# 品牌图标 / Logo —— SVG 内联，运行时用 QSvgRenderer 渲染（清晰、适配任意尺寸与 HiDPI）
+# ---------------------------------------------------------------------------
+ICON_SVG = """<svg width="110" height="110" viewBox="0 0 110 110" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bot-unit2" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1e40af"/>
+    </linearGradient>
+    <linearGradient id="bot-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101a2e"/><stop offset="1" stop-color="#0a1120"/>
+    </linearGradient>
+  </defs>
+  <rect x="7" y="7" width="96" height="96" rx="24" fill="url(#bot-bg)" stroke="#22304a" stroke-width="1"/>
+  <g fill="url(#bot-unit2)">
+    <rect x="48" y="25" width="14" height="14" rx="2.5" transform="rotate(45 55 32)"/>
+    <rect x="36" y="37" width="14" height="14" rx="2.5" transform="rotate(45 43 44)"/>
+    <rect x="60" y="37" width="14" height="14" rx="2.5" transform="rotate(45 67 44)" opacity=".62"/>
+    <rect x="48" y="49" width="14" height="14" rx="2.5" transform="rotate(45 55 56)" opacity=".62"/>
+  </g>
+  <rect x="44" y="58" width="22" height="22" rx="3.5" transform="rotate(45 55 69)" fill="#60a5fa"/>
+</svg>"""
+
+LOGO_SVG = """<svg width="360" height="64" viewBox="0 0 360 64" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="lk-unit" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b82f6"/><stop offset="1" stop-color="#1e40af"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(2,2) scale(0.545)">
+    <g fill="url(#lk-unit)">
+      <rect x="48" y="25" width="14" height="14" rx="2.5" transform="rotate(45 55 32)"/>
+      <rect x="36" y="37" width="14" height="14" rx="2.5" transform="rotate(45 43 44)"/>
+      <rect x="60" y="37" width="14" height="14" rx="2.5" transform="rotate(45 67 44)" opacity=".62"/>
+      <rect x="48" y="49" width="14" height="14" rx="2.5" transform="rotate(45 55 56)" opacity=".62"/>
+    </g>
+    <rect x="44" y="58" width="22" height="22" rx="3.5" transform="rotate(45 55 69)" fill="#60a5fa"/>
+  </g>
+  <text x="74" y="40" font-family="-apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+        font-size="24" font-weight="600" letter-spacing="2" fill="#dbe4f0">批量调仓下单工具</text>
+</svg>"""
+
+
+def _svg_pixmap(svg, w, h, dpr=2.0):
+    """SVG 字符串 → QPixmap：按 dpr 渲染高分辨率再标记设备像素比，HiDPI 下依然锐利。"""
+    pm = QPixmap(round(w * dpr), round(h * dpr))
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    p.setRenderHint(QPainter.SmoothPixmapTransform)
+    QSvgRenderer(QByteArray(svg.encode("utf-8"))).render(p)
+    p.end()
+    pm.setDevicePixelRatio(dpr)
+    return pm
+
+
+def _app_icon():
+    """应用图标 QIcon（多尺寸位图，供窗口标题栏 / 任务栏 / Alt-Tab）。"""
+    ic = QIcon()
+    for s in (16, 24, 32, 48, 64, 128, 256):
+        ic.addPixmap(_svg_pixmap(ICON_SVG, s, s, dpr=1.0))
+    return ic
 
 
 def _num_font():
@@ -724,6 +788,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(APP_TITLE)
+        self.setWindowIcon(_app_icon())
         self.resize(1080, 660)
         self.settings = QSettings("PortfolioAdjust", "调仓工具")
         self.products = []
@@ -844,7 +909,11 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "检查更新", reason)
 
     def _on_about(self):
-        QMessageBox.information(self, "关于", f"批量调仓下单工具\n版本 {APP_VERSION}")
+        box = QMessageBox(self)
+        box.setWindowTitle("关于")
+        box.setIconPixmap(_svg_pixmap(ICON_SVG, 72, 72))   # 只放 Logo，不重复出现软件名称
+        box.setText(f"版本 {APP_VERSION}")
+        box.exec()
 
     # ------------------------------------------------------------------ UI
     def _build_ui(self):
@@ -852,6 +921,10 @@ class MainWindow(QMainWindow):
         root = QVBoxLayout(central); root.setContentsMargins(14, 12, 14, 12); root.setSpacing(10)
 
         bar = QHBoxLayout(); bar.setSpacing(10)
+        self.logo = QLabel()                                  # 品牌横版 Logo（最左，常驻）
+        self.logo.setPixmap(_svg_pixmap(LOGO_SVG, 180, 32))
+        bar.addWidget(self.logo)
+        bar.addSpacing(10)
         self.btn_open = QPushButton("📁  选择产品文件夹")     # 设置入口（左侧，与右侧操作区分开）
         self.btn_open.setCursor(Qt.PointingHandCursor)
         self.btn_open.clicked.connect(self.on_open_folder)
@@ -1577,6 +1650,7 @@ def main():
         sys.exit(code)
     app = QApplication(sys.argv)
     app.setApplicationName(APP_TITLE)
+    app.setWindowIcon(_app_icon())     # 任务栏 / Alt-Tab 图标
     _install_chinese(app)              # 统一标准按钮为简体中文（OK→确定 / Cancel→取消 / Yes→是 / No→否）
     app.setStyleSheet(DARK_QSS)
     f = app.font(); f.setPointSize(max(f.pointSize(), 10)); app.setFont(f)
