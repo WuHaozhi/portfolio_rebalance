@@ -135,7 +135,7 @@ def test_header_not_in_first_row(tmp_path):
     """新-E：首行是 banner、真表头在第 2 行时仍能解析，并提示。"""
     path = tmp_path / "带banner20260610.xlsx"
     _mk(path,
-        ["稳进9号 实时监控 20260610", None, None, None, None, None, None],   # banner 作为首行
+        ["示例产品 持仓监控 20260101", None, None, None, None, None, None],   # banner 作为首行
         [["分类", "资产代码", "资产名称", "公允价格", "持仓数量", "持仓市值", "持仓权重"],
          [None, "600000.SH", "浦发", 10.0, 1000, 10000.0, 1]])
     p = read_product_file(str(path))

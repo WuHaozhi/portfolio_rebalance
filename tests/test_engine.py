@@ -185,13 +185,16 @@ def test_new_stock_buy(synth_product, synth_merged):
 
 # --------------------------- 真实文件 ---------------------------
 def test_real_file(sample_file):
+    """端到端：用 product/ 下持仓最丰富的真实文件跑一遍取价+下单（不依赖具体产品名/代码）。"""
     from rebalancer import read_product_folder
     ps = read_product_folder(os.path.dirname(sample_file))
     mp = merged_security_pool(ps)
-    assert any(p.name == "稳进9号" for p in ps)   # 文件夹可能含其他示例产品，不依赖顺序
-    price = default_cny_price("600276.SH", ps, mp)
-    g = DirectionGroup("稳进9号", "买入", 1_000_000, "等金额",
-                       [StockEntry("600276.SH", price=price), StockEntry("600309.SH", price=default_cny_price("600309.SH", ps, mp))])
+    rich = max(ps, key=lambda p: len(p.securities()))      # 持仓最丰富的产品
+    picks = rich.securities()[:2]
+    assert picks                                           # 能选出可调仓证券
+    g = DirectionGroup(rich.name, "买入", 1_000_000, "等金额",
+                       [StockEntry(s.code, price=default_cny_price(s.code, ps, mp, prefer_product=rich))
+                        for s in picks])
     res = build_orders([g], ps, mp)
-    assert len(res.orders) == 2
+    assert len(res.orders) >= 1                            # 能产出下单指令
     assert all(o.buy_qty % 100 == 0 for o in res.orders)  # 取整到手

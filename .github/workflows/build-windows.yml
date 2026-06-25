@@ -9,6 +9,11 @@ on:
     tags: ["v*"]
   workflow_dispatch: {}
 
+# 打 tag 时要创建 Release，需要写仓库内容的权限（默认 token 只读，会报
+# "Resource not accessible by integration"）。
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -17,6 +22,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip
@@ -63,6 +69,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
       - name: 安装依赖
         run: |
           python -m pip install --upgrade pip

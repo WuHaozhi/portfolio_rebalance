@@ -44,7 +44,7 @@ class Holding:
 class Product:
     """一个产品（对应 product 文件夹下一个 Excel 文件）。"""
 
-    name: str                                  # 产品名，如 稳进9号
+    name: str                                  # 产品名（取自文件名）
     date: str = ""                             # 数据日期，如 20260610
     source_file: str = ""                      # 源文件路径
     total_assets: float = 0.0                  # 产品总资产（全部汇总行的持仓市值）

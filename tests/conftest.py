@@ -10,13 +10,13 @@ from rebalancer.models import Holding, Product, StockPoolItem  # noqa: E402
 
 @pytest.fixture
 def sample_file():
-    """真实样例产品文件路径（若不存在则跳过相关测试）。"""
-    path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        "product", "稳进9号-实时监控20260610.xlsx")
-    if not os.path.exists(path):
-        pytest.skip("样例文件不存在")
-    return path
+    """真实样例产品文件路径：取 product/ 下第一个产品 .xlsx（不写死具体产品名）；没有则跳过。"""
+    folder = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "product")
+    if os.path.isdir(folder):
+        for f in sorted(os.listdir(folder)):
+            if f.lower().endswith((".xlsx", ".xlsm")) and not f.startswith(("~$", "交易指令", "调仓输入")):
+                return os.path.join(folder, f)
+    pytest.skip("样例产品文件不存在")
 
 
 @pytest.fixture

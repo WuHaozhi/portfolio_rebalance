@@ -773,7 +773,7 @@ class MainWindow(QMainWindow):
                 + "\n".join(wlines[:30]) + ("\n  …" if len(wlines) > 30 else ""))
 
     def _rescan(self):
-        """重新扫描当前文件夹（基金经理可能中途往里加/删了产品文件）。
+        """重新扫描当前文件夹（用户可能中途往里加/删了产品文件）。
         刷新产品列表、合并证券池，并同步所有已存在的产品下拉选项（保留当前选择）。"""
         if not self.folder or not os.path.isdir(self.folder):
             return

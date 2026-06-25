@@ -9,7 +9,7 @@ from __future__ import annotations
 #   填成你的仓库 "用户名/仓库名"，例如 "victorwu/portfolio-adjust"；留空则不检查。
 #   仓库需 Public（私有库的 Release 下载要登录）；或改用下方 UPDATE_MANIFEST_URL。
 # ---------------------------------------------------------------------------
-UPDATE_REPO = "WuHaozhi/portfolio-adjust"
+UPDATE_REPO = "WuHaozhi/portfolio_rebalance"
 # 备选：直接给一个返回 {"version": "...", "url": "..."} 的公开 JSON 地址（优先于 UPDATE_REPO）
 UPDATE_MANIFEST_URL = ""
 

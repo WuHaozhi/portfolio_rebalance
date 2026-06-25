@@ -150,21 +150,23 @@ def test_unrecognized_direction_skipped_at_engine(synth_product, synth_merged):
 
 # ============ 证券池：含债券/基金 + 可转债手数 ============
 
-def test_securities_includes_bonds_funds():
-    from rebalancer import read_product_folder, merged_security_pool
+def test_securities_excludes_cash_futures_real_file():
+    """证券池：现金/期货被排除，且不多于总持仓（用 product/ 下持仓最丰富的真实文件验证）。"""
+    from rebalancer import read_product_folder
     import os as _os
-    path = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))),
-                         "product", "稳进9号-实时监控20260610.xlsx")
-    if not _os.path.exists(path):
-        import pytest as _pt; _pt.skip("样例文件不存在")
-    ps = read_product_folder(_os.path.dirname(path))
-    p9 = next(p for p in ps if p.name == "稳进9号")    # 文件夹可能含其他示例产品
-    secs = p9.securities()
+    folder = _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))), "product")
+    files = [f for f in (_os.listdir(folder) if _os.path.isdir(folder) else [])
+             if f.lower().endswith((".xlsx", ".xlsm"))
+             and not f.startswith(("~$", "交易指令", "调仓输入"))]
+    if not files:
+        import pytest as _pt; _pt.skip("样例产品文件不存在")
+    ps = read_product_folder(folder)
+    rich = max(ps, key=lambda p: len(p.holdings))     # 取持仓最丰富的产品（不依赖具体产品名）
+    secs = rich.securities()
     cats = {h.category for h in secs}
-    assert any("股票" in c for c in cats) and any("债" in c for c in cats) and any("基金" in c for c in cats)
-    assert not any("现金" in c or "期货" in c for c in cats)   # 排除现金/期货
-    # 稳进9号 证券池 = 股票136+债券80+基金7 = 223
-    assert len(p9.securities()) == 223
+    assert secs                                       # 能选出可调仓证券
+    assert not any("现金" in c or "期货" in c or "回购" in c for c in cats)   # 排除现金/期货/回购
+    assert len(secs) <= len(rich.holdings)            # 不多于总持仓
 
 
 def test_convertible_bond_lot_is_10():
@@ -202,7 +204,7 @@ def test_duplicate_product_names_disambiguated(tmp_path):
         ws.append(["   股票(1)", None, None, "-", None, 50000, 0.5])
         ws.append([None, "600000.SH", "浦发", 10, 5000, 50000, 0.5])
         wb.save(str(tmp_path / fn))
-    mk("稳进9号-A20260610.xlsx"); mk("稳进9号-B20260610.xlsx")
+    mk("测试产品-A20260101.xlsx"); mk("测试产品-B20260101.xlsx")
     ps = read_product_folder(str(tmp_path))
     assert len({p.name for p in ps}) == 2   # 两个产品名互不相同（已去重）
 

@@ -7,8 +7,8 @@ from rebalancer import config
 
 
 def test_parse_name_date():
-    assert parse_product_name_date("稳进9号-实时监控20260610.xlsx") == ("稳进9号", "20260610")
-    assert parse_product_name_date("稳进9号20260610.xlsx") == ("稳进9号", "20260610")
+    assert parse_product_name_date("测试产品-实时监控20260101.xlsx") == ("测试产品", "20260101")
+    assert parse_product_name_date("测试产品20260101.xlsx") == ("测试产品", "20260101")
     assert parse_product_name_date("组合12345678.xlsx") == ("组合12345678", "")  # 非法日期不截断
     assert parse_product_name_date("中证500增强.xlsx") == ("中证500增强", "")
     assert parse_product_name_date("产品20261301.xlsx")[1] == ""  # 13月非法
