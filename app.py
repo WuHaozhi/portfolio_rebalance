@@ -1351,13 +1351,28 @@ def _selftest():
     with tempfile.TemporaryDirectory() as d:
         out = os.path.join(d, "o.xlsx"); write_orders(res.orders, out)
         assert os.path.exists(out)
-    print("SELFTEST OK：依赖完整，核心流程通过。")
+    # 打包成「窗口程序」(console=False) 时 sys.stdout 可能为 None，print 会抛错——加保护，
+    # 避免无界面 CI 上崩溃触发不可见错误对话框把冒烟测试卡死。
+    try:
+        if sys.stdout:
+            print("SELFTEST OK：依赖完整，核心流程通过。")
+    except Exception:
+        pass
     return 0
 
 
 def main():
     if "--selftest" in sys.argv:
-        sys.exit(_selftest())
+        try:
+            code = _selftest()
+        except BaseException as exc:   # 任何异常都干净退出，绝不把未捕获异常抛到窗口程序外
+            try:
+                if sys.stderr:
+                    print(f"SELFTEST FAIL: {exc}", file=sys.stderr)
+            except Exception:
+                pass
+            code = 1
+        sys.exit(code)
     app = QApplication(sys.argv)
     app.setApplicationName(APP_TITLE)
     app.setStyleSheet(DARK_QSS)

@@ -17,6 +17,7 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 30        # 兜底：任何步骤卡死最多 30 分钟，绝不再无限 hang
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,8 +34,15 @@ jobs:
         run: pyinstaller build/调仓工具.spec --noconfirm --clean
       - name: 冒烟测试打包产物
         shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen        # 与 macOS 一致，避免窗口程序在无界面 CI 上卡死
         run: |
-          $p = Start-Process -FilePath "dist\调仓工具.exe" -ArgumentList "--selftest" -Wait -PassThru -NoNewWindow
+          $p = Start-Process -FilePath "dist\调仓工具.exe" -ArgumentList "--selftest" -PassThru -NoNewWindow
+          if (-not $p.WaitForExit(120000)) {   # 2 分钟硬超时，卡住即失败而非无限等
+            Write-Host "selftest 超时（>120s），强制结束"
+            try { $p.Kill() } catch {}
+            exit 1
+          }
           Write-Host "selftest exit code:" $p.ExitCode
           if ($p.ExitCode -ne 0) { exit 1 }
       - name: 安装 Inno Setup 并打安装包
@@ -64,6 +72,7 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
