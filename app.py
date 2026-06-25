@@ -935,6 +935,15 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "读取失败", f"无法读取文件夹：\n{exc}"); return
         if not products:
             QMessageBox.warning(self, "提示", "该文件夹下没有产品 Excel（.xlsx）"); return
+        # 重新选择产品文件夹 = 切换数据源：已录入的交易组都是针对旧产品的，应清空回到初始空表。
+        # 有录入时先确认，避免误点「选择产品文件夹」丢失已录入内容（清空不可撤销）。
+        if self.tree.topLevelItemCount() > 0:
+            ans = QMessageBox.question(
+                self, "切换产品文件夹",
+                "加载新的产品文件夹会清空当前已录入的所有交易组，是否继续？")
+            if ans != QMessageBox.StandardButton.Yes:
+                return
+        self.tree.clear()
         self.folder = folder
         self.products = products
         self.merged = merged_security_pool(products)
