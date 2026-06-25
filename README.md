@@ -8,7 +8,7 @@
 
 ## 给用户：怎么用
 
-> 拿到 `调仓工具.exe` 双击即用，无需安装 Python。
+> 拿到安装包 `portfolio_rebalance_setup_v1.1.1.exe` 双击安装即用（或绿色版 `portfolio_rebalance.exe` 双击直接运行），无需安装 Python。安装后程序名是「调仓工具」。
 
 1. 首次点「选择产品文件夹」，选到放产品 Excel 的文件夹（之后自动记住）。每个 `.xlsx` = 一个产品。
 2. 新增交易组：选**产品**、**方向**、填**金额(元)**、选**方式**（等金额 / 当前持仓比例，必填）。
@@ -40,7 +40,7 @@
 
 | 平台 | 操作 | 产物 |
 | --- | --- | --- |
-| Windows | 双击 `build/build_windows.bat` | `dist/调仓工具.exe`（绿色版）+ 安装包（需先装 [Inno Setup 6](https://jrsoftware.org/isdl.php)） |
+| Windows | 双击 `build/build_windows.bat` | `dist/portfolio_rebalance.exe`（绿色版）+ `portfolio_rebalance_setup_v*.exe`（安装包，需先装 [Inno Setup 6](https://jrsoftware.org/isdl.php)） |
 | macOS | 双击 `build/build_mac.command` | `dist/调仓工具.app`（未签名，首次打开右键→打开） |
 | 通用 | `pyinstaller build/调仓工具.spec --noconfirm --clean` | 按当前系统出对应产物 |
 

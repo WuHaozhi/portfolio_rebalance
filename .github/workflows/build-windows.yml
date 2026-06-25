@@ -1,6 +1,6 @@
 name: 构建可执行文件（Windows + macOS）
 
-# 自动在 GitHub 提供的机器上打包：Windows 出 调仓工具.exe，macOS 出 调仓工具.app。
+# 自动在 GitHub 提供的机器上打包：Windows 出 portfolio_rebalance.exe，macOS 出 调仓工具.app。
 # 推送代码或手动触发后，到 Actions 页面下载对应产物；打 v* 标签会发到 Release。
 
 on:
@@ -37,7 +37,7 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen        # 与 macOS 一致，避免窗口程序在无界面 CI 上卡死
         run: |
-          $p = Start-Process -FilePath "dist\调仓工具.exe" -ArgumentList "--selftest" -PassThru -NoNewWindow
+          $p = Start-Process -FilePath "dist\portfolio_rebalance.exe" -ArgumentList "--selftest" -PassThru -NoNewWindow
           if (-not $p.WaitForExit(120000)) {   # 2 分钟硬超时，卡住即失败而非无限等
             Write-Host "selftest 超时（>120s），强制结束"
             try { $p.Kill() } catch {}
@@ -54,21 +54,21 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: 调仓工具-windows-绿色版
-          path: dist/调仓工具.exe
+          path: dist/portfolio_rebalance.exe
           if-no-files-found: error
       - name: 上传安装包
         uses: actions/upload-artifact@v4
         with:
           name: 调仓工具-windows-安装包
-          path: dist/调仓工具_安装包_v1.1.1.exe
+          path: dist/portfolio_rebalance_setup_v1.1.1.exe
           if-no-files-found: error
       - name: 发布到 Release（打 tag 时）
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/调仓工具.exe
-            dist/调仓工具_安装包_v1.1.1.exe
+            dist/portfolio_rebalance.exe
+            dist/portfolio_rebalance_setup_v1.1.1.exe
 
   build-macos:
     runs-on: macos-latest
@@ -91,14 +91,14 @@ jobs:
         run: |
           QT_QPA_PLATFORM=offscreen "dist/调仓工具.app/Contents/MacOS/调仓工具" --selftest
       - name: 压缩 .app
-        run: cd dist && ditto -c -k --keepParent "调仓工具.app" "调仓工具-macos.zip"
+        run: cd dist && ditto -c -k --keepParent "调仓工具.app" "portfolio_rebalance_macos.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: 调仓工具-macos
-          path: dist/调仓工具-macos.zip
+          path: dist/portfolio_rebalance_macos.zip
           if-no-files-found: error
       - name: 发布到 Release（打 tag 时）
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/调仓工具-macos.zip
+          files: dist/portfolio_rebalance_macos.zip

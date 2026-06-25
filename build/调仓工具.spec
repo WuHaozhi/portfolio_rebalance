@@ -4,7 +4,7 @@
 用法（在 Windows 上）：
     pip install -r requirements.txt pyinstaller
     pyinstaller build/调仓工具.spec --noconfirm
-产物在 dist/调仓工具.exe
+产物在 dist/portfolio_rebalance.exe（Windows）/ dist/调仓工具.app（macOS）
 """
 import os
 
@@ -65,15 +65,17 @@ if IS_MAC:
         info_plist={
             "CFBundleName": "调仓工具",
             "CFBundleDisplayName": "批量调仓下单工具",
-            "CFBundleShortVersionString": "1.1",
+            "CFBundleShortVersionString": "1.1.1",
             "NSHighResolutionCapable": True,
         },
     )
 else:
-    # Windows：单文件 .exe，双击即用
+    # Windows：单文件 .exe，双击即用。
+    # 文件名用 ASCII「portfolio_rebalance」——GitHub Release 会吞掉中文附件名；
+    # 程序窗口标题/安装后的快捷方式仍是中文「调仓工具」（见 app.py 与 installer.iss）。
     exe = EXE(
         pyz, a.scripts, a.binaries, a.zipfiles, a.datas, [],
-        name="调仓工具",
+        name="portfolio_rebalance",
         debug=False, bootloader_ignore_signals=False, strip=False,
         upx=False,              # 不依赖 UPX：避免 CI 无 UPX 的噪音与部分杀软误报
         upx_exclude=[], runtime_tmpdir=None,

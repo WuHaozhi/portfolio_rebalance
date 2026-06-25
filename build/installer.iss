@@ -1,13 +1,14 @@
-; Inno Setup 脚本：把 PyInstaller 产物 dist\调仓工具.exe 打成 Windows 安装包
+; Inno Setup 脚本：把 PyInstaller 产物 dist\portfolio_rebalance.exe 打成 Windows 安装包
 ; 用法（在 Windows 上，需先装 Inno Setup 6 https://jrsoftware.org/isdl.php）：
-;   1) 先 pyinstaller build\调仓工具.spec --noconfirm --clean  生成 dist\调仓工具.exe
+;   1) 先 pyinstaller build\调仓工具.spec --noconfirm --clean  生成 dist\portfolio_rebalance.exe
 ;   2) ISCC build\installer.iss
-;   产物：dist\调仓工具_安装包_v1.1.1.exe（双击安装，带开始菜单/桌面快捷方式/卸载）
+;   产物：dist\portfolio_rebalance_setup_v1.1.1.exe（双击安装，带开始菜单/桌面快捷方式/卸载）
+; 注：文件名用 ASCII（GitHub Release 会吞掉中文附件名）；安装后的程序名/快捷方式仍是中文「调仓工具」。
 
 #define MyAppName "调仓工具"
 #define MyAppVersion "1.1.1"
 #define MyAppPublisher "Portfolio Adjust"
-#define MyAppExeName "调仓工具.exe"
+#define MyAppExeName "portfolio_rebalance.exe"
 
 [Setup]
 AppId={{B7C3A1E2-9D4F-4A6B-8C12-PORTFOLIOADJUST}}
@@ -19,7 +20,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 UninstallDisplayIcon={app}\{#MyAppExeName}
 OutputDir=..\dist
-OutputBaseFilename=调仓工具_安装包_v{#MyAppVersion}
+OutputBaseFilename=portfolio_rebalance_setup_v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
