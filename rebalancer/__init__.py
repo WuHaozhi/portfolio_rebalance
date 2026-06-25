@@ -27,4 +27,4 @@ __all__ = [
     "read_product_file", "read_product_folder",
 ]
 
-__version__ = "1.1.2"
+__version__ = "1.1.3"

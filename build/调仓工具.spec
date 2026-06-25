@@ -72,7 +72,7 @@ if IS_MAC:
         info_plist={
             "CFBundleName": "调仓工具",
             "CFBundleDisplayName": "批量调仓下单工具",
-            "CFBundleShortVersionString": "1.1.2",
+            "CFBundleShortVersionString": "1.1.3",
             "NSHighResolutionCapable": True,
         },
     )

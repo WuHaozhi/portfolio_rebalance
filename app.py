@@ -23,7 +23,8 @@ from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QComboBox, QDialog,
     QDialogButtonBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
-    QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox, QPushButton,
+    QListWidget, QListWidgetItem, QMainWindow, QMenu, QMessageBox, QProgressDialog,
+    QPushButton,
     QRadioButton, QScrollArea, QStyledItemDelegate, QTableWidget,
     QTableWidgetItem, QTextEdit, QTreeWidget, QTreeWidgetItem, QVBoxLayout, QWidget,
 )
@@ -77,7 +78,12 @@ class UpdateChecker(QObject):
                     d = json.load(r)
                 ver = d.get("tag_name", "")
                 assets = d.get("assets") or []
-                url = (assets[0].get("browser_download_url") if assets else "") or d.get("html_url", "")
+                # 优先选 Windows 安装包（名字含 setup 的 .exe），自动更新要下载的就是它
+                setup = next((a for a in assets
+                              if "setup" in (a.get("name") or "").lower()
+                              and (a.get("name") or "").lower().endswith(".exe")), None)
+                pick = setup or (assets[0] if assets else None)
+                url = (pick.get("browser_download_url") if pick else "") or d.get("html_url", "")
             else:
                 self.failed.emit("未配置更新地址（请在 config.py 填 UPDATE_REPO）")
                 return
@@ -87,6 +93,48 @@ class UpdateChecker(QObject):
                 self.uptodate.emit(APP_VERSION)
         except Exception:  # noqa: BLE001 离线/超时/限流
             self.failed.emit("无法连接更新服务器，请检查网络后重试")
+
+
+class Downloader(QObject):
+    """后台线程下载安装包，按字节回报进度。结果回主线程。"""
+
+    progress = Signal(int)      # 0-100
+    done = Signal(str)          # 下载完成：本地文件路径
+    failed = Signal(str)        # 失败/取消：原因
+
+    def __init__(self, url, dst):
+        super().__init__()
+        self.url, self.dst, self._cancel = url, dst, False
+
+    def cancel(self):
+        self._cancel = True
+
+    def start(self):
+        import threading
+        threading.Thread(target=self._work, daemon=True).start()
+
+    def _work(self):
+        import urllib.request
+        try:
+            req = urllib.request.Request(self.url, headers={"User-Agent": "portfolio-adjust"})
+            with urllib.request.urlopen(req, timeout=30) as r:
+                total = int(r.headers.get("Content-Length", 0) or 0)
+                got = 0
+                with open(self.dst, "wb") as f:
+                    while True:
+                        if self._cancel:
+                            self.failed.emit("已取消更新")
+                            return
+                        chunk = r.read(262144)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        got += len(chunk)
+                        if total:
+                            self.progress.emit(min(100, int(got * 100 / total)))
+            self.done.emit(self.dst)
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(f"下载失败：{exc}")
 
 # 新增证券持久化文件：放在用户主目录（不在程序目录），换新 .exe/.app 重新部署后仍保留。
 CUSTOM_DIR = os.path.join(os.path.expanduser("~"), ".portfolio_adjust")
@@ -674,11 +722,59 @@ class MainWindow(QMainWindow):
 
     def _on_update_found(self, ver, url):
         self._reset_update_btn()
-        if QMessageBox.question(
-                self, "发现新版本", f"检测到新版本 {ver}（当前 {APP_VERSION}）。\n是否前往下载更新？\n\n"
-                f"下载后双击新安装包覆盖安装即可，你的设置与新增证券会保留。",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes) == QMessageBox.Yes and url:
-            QDesktopServices.openUrl(QUrl(url))
+        box = QMessageBox(QMessageBox.Question, "发现新版本",
+                          f"检测到新版本 {ver}（当前 {APP_VERSION}）。\n\n"
+                          f"点「立即更新」将自动下载并安装，过程中会弹出一次 Windows 授权窗口、"
+                          f"点「是」即可；程序会短暂关闭并自动重新打开。\n"
+                          f"你的设置与新增证券不受影响。", parent=self)
+        now = box.addButton("立即更新", QMessageBox.AcceptRole)
+        box.addButton("稍后", QMessageBox.RejectRole)
+        box.setDefaultButton(now)
+        box.exec()
+        if box.clickedButton() is not now:
+            return
+        if not url:
+            QMessageBox.warning(self, "更新", "没有可用的下载地址。"); return
+        # 仅打包后的 Windows exe 支持静默原地升级；开发态/非安装包链接则退回浏览器下载
+        is_setup = url.lower().endswith(".exe") and "setup" in url.lower()
+        if sys.platform != "win32" or not getattr(sys, "frozen", False) or not is_setup:
+            QDesktopServices.openUrl(QUrl(url)); return
+        self._download_and_install(ver, url)
+
+    def _download_and_install(self, ver, url):
+        """下载安装包 -> 静默原地升级 -> 自动重开。配置/新增证券在注册表与用户目录，不受影响。"""
+        import tempfile
+        safe_ver = "".join(c for c in str(ver) if c.isalnum() or c in "._-") or "new"
+        dst = os.path.join(tempfile.gettempdir(), f"portfolio_rebalance_setup_{safe_ver}.exe")
+        dlg = QProgressDialog("正在下载更新…", "取消", 0, 100, self)
+        dlg.setWindowTitle("更新"); dlg.setWindowModality(Qt.WindowModal)
+        dlg.setMinimumDuration(0); dlg.setAutoClose(False); dlg.setAutoReset(False)
+        dl = Downloader(url, dst)
+        dl.progress.connect(dlg.setValue)
+        dl.done.connect(lambda path: (dlg.close(), self._run_installer(path)))
+
+        def _fail(msg):
+            dlg.close()
+            if "取消" not in msg:
+                QMessageBox.warning(self, "更新", msg + "\n\n可稍后重试，或点「更多→检查更新」手动下载。")
+        dl.failed.connect(_fail)
+        dlg.canceled.connect(dl.cancel)
+        self._downloader = dl      # 保引用，防止被回收
+        dl.start()
+
+    def _run_installer(self, path):
+        """启动静默安装并退出本程序，让安装器替换正在运行的 exe；装完由安装器自动拉起新程序。"""
+        import subprocess
+        # 先 2 秒让本程序完全退出（释放 exe 占用），再静默安装；安装器 [Run] 会自动重开程序
+        cmd = (f'timeout /t 2 /nobreak >nul & '
+               f'"{path}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART')
+        try:
+            DETACHED = 0x00000008 | 0x00000200   # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+            subprocess.Popen(["cmd", "/c", cmd], creationflags=DETACHED, close_fds=True)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.warning(self, "更新", f"启动安装失败：{exc}\n已下载到：\n{path}\n可手动双击安装。")
+            return
+        QApplication.quit()
 
     def _on_update_uptodate(self, ver):
         self._reset_update_btn()
