@@ -276,9 +276,25 @@ def _to_int(s):
     return int(round(f)) if f is not None else None
 
 
-def _mono():
-    f = QFont("Menlo"); f.setStyleHint(QFont.Monospace); f.setPointSize(12)
+def _num_font():
+    # 数字列字体：Times New Roman（衬线，比 Menlo 等宽更顺眼）；字号沿用 12pt 不变。
+    f = QFont("Times New Roman"); f.setStyleHint(QFont.Serif); f.setPointSize(12)
     return f
+
+
+def _group_digits(text):
+    """数字串整数部分加千位分隔符（国际标准，纯显示用：不改精度、不动存储值）：
+    '4000000'->'4,000,000'、'178500'->'178,500'、'1234.5'->'1,234.5'；非数字串原样返回。"""
+    t = text.strip() if text else ""
+    if not t:
+        return text
+    sign = ""
+    if t[0] in "+-":
+        sign, t = t[0], t[1:]
+    intpart, dot, frac = t.partition(".")
+    if not intpart.isdigit() or (dot and not frac.isdigit()):
+        return text
+    return f"{sign}{int(intpart):,}{('.' + frac) if dot else ''}"
 
 
 def _dot(color, d=11):
@@ -365,6 +381,13 @@ class TreeDelegate(QStyledItemDelegate):
     def setModelData(self, editor, model, index):
         if isinstance(editor, QLineEdit):
             model.setData(index, editor.text().strip(), Qt.EditRole)
+
+    def initStyleOption(self, option, index):
+        # 数字列（金额/价格/股数/调整）显示时加千位分隔符——只改绘制文本，不动存储值，
+        # 故引擎(读 item.text)、编辑器(读 EditRole)、导出拿到的仍是无逗号的干净数字。
+        super().initStyleOption(option, index)
+        if index.column() in RIGHT_COLS:
+            option.text = _group_digits(option.text)
 
     def paint(self, painter, option, index):
         super().paint(painter, option, index)
@@ -677,7 +700,9 @@ class PreviewDialog(QDialog):
                     int(o.buy_qty) if o.buy_qty else "", int(o.sell_qty) if o.sell_qty else ""]
             is_sell = o.direction == config.DIR_SELL
             for c, val in enumerate(vals):
-                cell = QTableWidgetItem("" if val == "" else str(val))
+                # 买入/卖出数量(第4、5列)加千位分隔符，与主界面一致；代码列(第2列)等原样不动
+                disp = _group_digits(str(val)) if c in (4, 5) and val != "" else ("" if val == "" else str(val))
+                cell = QTableWidgetItem(disp)
                 cell.setTextAlignment(Qt.AlignVCenter | (Qt.AlignLeft if c == 3 else Qt.AlignCenter))
                 if is_sell:
                     cell.setBackground(yellow); cell.setForeground(black)
@@ -974,7 +999,7 @@ class MainWindow(QMainWindow):
         for c in range(len(HEADERS)):
             if c in RIGHT_COLS:
                 it.setTextAlignment(c, Qt.AlignRight | Qt.AlignVCenter)
-                it.setFont(c, _mono())
+                it.setFont(c, _num_font())
             else:
                 it.setTextAlignment(c, Qt.AlignVCenter | (Qt.AlignLeft if c in (COL_PRODUCT, COL_POOL) else Qt.AlignHCenter))
         return it
