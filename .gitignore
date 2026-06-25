@@ -1,0 +1,40 @@
+# ── 敏感数据：产品持仓（含真实持仓，绝不入库）──
+product/*.xlsx
+product/*.xlsm
+product/*.xls
+!product/README*          # 如放了说明文件则保留
+
+# ── 运行 / 导出生成物 ──
+交易指令*.xlsx             # 导出的券商下单文件
+# 注：基金经理「新增证券」记录在用户主目录 ~/.portfolio_adjust/，不在仓库内
+
+# ── 打包产物 ──
+dist/                     # PyInstaller / Inno Setup 输出（exe / .app / 安装包）
+build/调仓工具/            # PyInstaller 工作目录（只忽略它，保留 build/ 下的脚本与配置）
+*.spec.bak
+*.zip
+调仓工具.app/
+界面预览*.png              # 临时渲染的预览图
+
+# ── 参考文档 / 规格 / 审查报告（本地留存，不入库）──
+doc/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# ── 编辑器 / 操作系统 ──
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── 工具会话本地文件 ──
+.claude/
