@@ -4,7 +4,7 @@ REM ============================================================
 REM   一键把「调仓工具」打包成 Windows 绿色版 .exe 和 安装包
 REM   在任意装有 Python 3.10+ 的 Windows 电脑上双击运行本文件即可
 REM   产物：dist\portfolio_rebalance.exe（绿色版）
-REM         dist\portfolio_rebalance_setup_v1.1.4.exe（安装包，需装 Inno Setup）
+REM         dist\portfolio_rebalance_setup_v1.1.5.exe（安装包，需装 Inno Setup）
 REM ============================================================
 setlocal
 cd /d "%~dp0.."
@@ -52,9 +52,9 @@ echo [5/5] 生成安装包（需 Inno Setup）...
 set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if exist "%ISCC%" (
     "%ISCC%" build\installer.iss
-    echo   安装包已生成： %cd%\dist\portfolio_rebalance_setup_v1.1.4.exe
+    echo   安装包已生成： %cd%\dist\portfolio_rebalance_setup_v1.1.5.exe
 ) else (
-    where ISCC >nul 2>&1 && ( ISCC build\installer.iss && echo   安装包已生成： %cd%\dist\portfolio_rebalance_setup_v1.1.4.exe ) || (
+    where ISCC >nul 2>&1 && ( ISCC build\installer.iss && echo   安装包已生成： %cd%\dist\portfolio_rebalance_setup_v1.1.5.exe ) || (
         echo   未检测到 Inno Setup，已跳过安装包，仅生成绿色版 dist\portfolio_rebalance.exe
         echo   如需安装包：到 https://jrsoftware.org/isdl.php 安装 Inno Setup 6 后，重跑本文件，
         echo   或手动执行： ISCC build\installer.iss
@@ -64,6 +64,6 @@ if exist "%ISCC%" (
 echo.
 echo 完成！产物在 dist\ 目录：
 echo   - portfolio_rebalance.exe              绿色版，双击即用（无需安装）
-echo   - portfolio_rebalance_setup_v1.1.4.exe   安装包，双击安装（带开始菜单/桌面快捷方式/卸载）
+echo   - portfolio_rebalance_setup_v1.1.5.exe   安装包，双击安装（带开始菜单/桌面快捷方式/卸载）
 echo.
 pause

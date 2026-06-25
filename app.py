@@ -763,7 +763,16 @@ class MainWindow(QMainWindow):
         dlg.setMinimumDuration(0); dlg.setAutoClose(False); dlg.setAutoReset(False)
         dl = Downloader(url, dst)
         dl.progress.connect(dlg.setValue)
-        dl.done.connect(lambda path: (dlg.close(), self._run_installer(path)))
+
+        def _on_done(path):
+            dlg.close()
+            try:                       # 安装包约 48MB；过小说明下载到的是错误页/不完整
+                if not os.path.exists(path) or os.path.getsize(path) < 1_000_000:
+                    QMessageBox.warning(self, "更新", "下载的安装包不完整，请稍后重试。"); return
+            except OSError:
+                pass
+            self._run_installer(path)
+        dl.done.connect(_on_done)
 
         def _fail(msg):
             dlg.close()
@@ -775,17 +784,30 @@ class MainWindow(QMainWindow):
         dl.start()
 
     def _run_installer(self, path):
-        """启动静默安装并退出本程序，让安装器替换正在运行的 exe；装完由安装器自动拉起新程序。"""
-        import subprocess
-        # 先 2 秒让本程序完全退出（释放 exe 占用），再静默安装；安装器 [Run] 会自动重开程序
-        cmd = (f'timeout /t 2 /nobreak >nul & '
-               f'"{path}" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART')
+        """提权启动静默安装并退出本程序，让安装器替换正在运行的 exe；装完安装器 [Run] 自动重开新版。
+
+        安装器要求管理员权限：必须用 ShellExecute「runas」触发 UAC 提权——
+        用 cmd / CreateProcess 启动需提权的 exe 会直接报 ERROR_ELEVATION_REQUIRED 而静默失败
+        （这正是早期版本"下载完关闭却没更新"的原因）。
+        """
+        import ctypes
         try:
-            DETACHED = 0x00000008 | 0x00000200   # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
-            subprocess.Popen(["cmd", "/c", cmd], creationflags=DETACHED, close_fds=True)
+            ShellExecuteW = ctypes.windll.shell32.ShellExecuteW
+            ShellExecuteW.restype = ctypes.c_void_p
+            ShellExecuteW.argtypes = [ctypes.c_void_p, ctypes.c_wchar_p, ctypes.c_wchar_p,
+                                      ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_int]
+            rc = ShellExecuteW(None, "runas", path,
+                               "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART", None, 1)  # SW_SHOWNORMAL
+            rc = int(rc) if rc is not None else 0
         except Exception as exc:  # noqa: BLE001
             QMessageBox.warning(self, "更新", f"启动安装失败：{exc}\n已下载到：\n{path}\n可手动双击安装。")
             return
+        if rc <= 32:   # 失败或用户在 UAC 里取消了授权
+            QMessageBox.warning(
+                self, "更新",
+                f"更新未开始（可能取消了系统授权，代码 {rc}）。\n已下载到：\n{path}\n可手动双击安装。")
+            return
+        # 提权安装已启动：退出本程序以释放 exe 占用；安装器装完会自动重新打开新版本
         QApplication.quit()
 
     def _on_update_uptodate(self, ver):
