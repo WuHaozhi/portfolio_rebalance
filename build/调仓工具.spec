@@ -22,11 +22,18 @@ EXCLUDES = [
     "tkinter", "matplotlib", "numpy", "scipy", "PIL", "pandas",
 ]
 
+# 带上 Qt 简体中文翻译（OK/Cancel/Yes/No 等标准按钮汉化），放到与 QLibraryInfo 一致的子目录
+import PySide6 as _ps6
+_TR_SRC = os.path.join(os.path.dirname(_ps6.__file__), "Qt", "translations")
+_TR_DATAS = [(os.path.join(_TR_SRC, f"{n}.qm"), os.path.join("PySide6", "Qt", "translations"))
+             for n in ("qtbase_zh_CN", "qt_zh_CN")
+             if os.path.exists(os.path.join(_TR_SRC, f"{n}.qm"))]
+
 a = Analysis(
     [os.path.join(ROOT, "app.py")],
     pathex=[ROOT],
     binaries=[],
-    datas=[],
+    datas=_TR_DATAS,
     hiddenimports=["openpyxl.cell._writer"],
     hookspath=[],
     runtime_hooks=[],
@@ -65,7 +72,7 @@ if IS_MAC:
         info_plist={
             "CFBundleName": "调仓工具",
             "CFBundleDisplayName": "批量调仓下单工具",
-            "CFBundleShortVersionString": "1.1.1",
+            "CFBundleShortVersionString": "1.1.2",
             "NSHighResolutionCapable": True,
         },
     )

@@ -17,7 +17,8 @@ import re
 import sys
 import traceback
 
-from PySide6.QtCore import Qt, QSettings, QObject, Signal, QUrl
+from PySide6.QtCore import (Qt, QSettings, QObject, Signal, QUrl,
+                            QTranslator, QLibraryInfo, QLocale)
 from PySide6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QApplication, QButtonGroup, QComboBox, QDialog,
@@ -394,7 +395,9 @@ class SecurityPicker(QDialog):
         nb.addStretch(1)
         v.addWidget(self.new_box)
 
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        bb = QDialogButtonBox()
+        ok = bb.addButton("确定", QDialogButtonBox.AcceptRole); ok.setObjectName("primary")
+        bb.addButton("取消", QDialogButtonBox.RejectRole)
         bb.accepted.connect(self._accept); bb.rejected.connect(self.reject)
         v.addWidget(bb)
         self._refresh()
@@ -1172,33 +1175,49 @@ class MainWindow(QMainWindow):
         if not self.products:
             return
         self.tree.blockSignals(True)
+        warns_all, err = [], None
         try:
             sold_so_far = {}   # (产品,代码)->已显示卖出量，跨组封顶，使界面卖出之和=实际卖出
             for group, rows in self._collect():
-                product = self._product_by_name(group.product)
-                for e, snode in rows:
-                    snode.setText(COL_PRICE, (f"{e.price:.3f}".rstrip("0").rstrip(".")) if e.price else "")
-                    snode.setForeground(COL_PRICE, QColor(C_DIM))
-                compute_group_shares(group, product)
-                direction = normalize_direction(group.direction)
-                for e, snode in rows:
-                    disp = e.shares
-                    if direction == config.DIR_SELL and product is not None and e.shares:
-                        h = product.get(e.code)
-                        cur = h.quantity if h else 0.0
-                        already = sold_so_far.get((group.product, e.code), 0)
-                        remaining = max(0.0, cur - already)
-                        disp = clamp_sell_to_holding(e.shares, remaining, e.code, product)
-                        if disp > 0:
-                            sold_so_far[(group.product, e.code)] = already + disp
-                    snode.setText(COL_SHARES, str(disp) if disp else "0")
-                    snode.setForeground(COL_SHARES, QColor(C_TEXT))
+                try:           # 单组出错不影响其他组（避免一只产品异常把后面所有产品的股数清零）
+                    product = self._product_by_name(group.product)
+                    for e, snode in rows:
+                        snode.setText(COL_PRICE, (f"{e.price:.3f}".rstrip("0").rstrip(".")) if e.price else "")
+                        snode.setForeground(COL_PRICE, QColor(C_DIM))
+                    w, _ok = compute_group_shares(group, product)
+                    warns_all.extend(w)
+                    gwarn = w[0] if w else ""
+                    direction = normalize_direction(group.direction)
+                    for e, snode in rows:
+                        disp = e.shares
+                        if direction == config.DIR_SELL and product is not None and e.shares:
+                            h = product.get(e.code)
+                            cur = h.quantity if h else 0.0
+                            already = sold_so_far.get((group.product, e.code), 0)
+                            remaining = max(0.0, cur - already)
+                            disp = clamp_sell_to_holding(e.shares, remaining, e.code, product)
+                            if disp > 0:
+                                sold_so_far[(group.product, e.code)] = already + disp
+                        snode.setText(COL_SHARES, str(disp) if disp else "0")
+                        snode.setForeground(COL_SHARES, QColor(C_TEXT))
+                        # 股数为 0 时，把"为何是 0"的原因挂成悬停提示（卖未持有/持仓比例无基准/无价等）
+                        snode.setToolTip(COL_SHARES, "" if disp else gwarn)
+                except Exception as ex:  # noqa: BLE001
+                    err = ex
             self._mark_required()      # 标红未填的必填项（仍在 blockSignals 内，避免回环）
-        except Exception:  # noqa: BLE001
-            pass
+        except Exception as ex:  # noqa: BLE001
+            err = ex
         finally:
             self.tree.blockSignals(False)
         self.tree.viewport().update()      # 刷新 delegate 的淡红必填边框
+        # 把"为何股数是 0"的提示实时显示到状态栏，不必等到「预览」才知道
+        if err is not None:
+            self.statusBar().showMessage(f"⚠ 计算出错：{err}", 8000)
+        elif warns_all:
+            more = f"（共 {len(warns_all)} 条，详见预览）" if len(warns_all) > 1 else ""
+            self.statusBar().showMessage("⚠ " + warns_all[0] + more, 8000)
+        else:
+            self.statusBar().clearMessage()
 
     # ------------------------------------------------------------- 预览导出
     def _validate(self):
@@ -1375,10 +1394,41 @@ def main():
         sys.exit(code)
     app = QApplication(sys.argv)
     app.setApplicationName(APP_TITLE)
+    _install_chinese(app)              # 统一标准按钮为简体中文（OK→确定 / Cancel→取消 / Yes→是 / No→否）
     app.setStyleSheet(DARK_QSS)
     f = app.font(); f.setPointSize(max(f.pointSize(), 10)); app.setFont(f)
     win = MainWindow(); win.show()
     sys.exit(app.exec())
+
+
+# 进程级保留翻译器引用，防止被 GC 回收导致翻译失效
+_ZH_TRANSLATORS: list = []
+
+
+def _install_chinese(app):
+    """把 Qt 标准控件文案统一成简体中文。
+
+    默认语言环境设为中国，并加载 Qt 自带的 qtbase_zh_CN 翻译（覆盖 OK/Cancel/Yes/No 等
+    标准按钮与对话框文案）。打包时翻译文件随 PySide6 一起带上（见 .spec 的 translations）。
+    """
+    QLocale.setDefault(QLocale(QLocale.Chinese, QLocale.China))
+    try:
+        base = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    except Exception:  # noqa: BLE001 兼容旧枚举写法
+        base = QLibraryInfo.location(QLibraryInfo.TranslationsPath)
+    cands = [base]
+    mei = getattr(sys, "_MEIPASS", None)        # 打包后翻译文件可能在不同子目录，逐一兜底
+    if mei:
+        cands += [os.path.join(mei, "PySide6", "Qt", "translations"),
+                  os.path.join(mei, "PySide6", "translations"),
+                  os.path.join(mei, "translations")]
+    for name in ("qtbase_zh_CN", "qt_zh_CN"):
+        for cand in cands:
+            tr = QTranslator(app)
+            if tr.load(name, cand):
+                app.installTranslator(tr)
+                _ZH_TRANSLATORS.append(tr)
+                break
 
 
 if __name__ == "__main__":
