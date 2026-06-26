@@ -113,9 +113,4 @@ class TradeOrder:
     name: str
     buy_qty: float = 0.0
     sell_qty: float = 0.0
-    # 以下为辅助/审计信息，不一定写进最终下单表
-    current_mv: float = 0.0
-    target_mv: float = 0.0
-    diff_mv: float = 0.0
-    unit_price: float = 0.0
-    note: str = ""
+    unit_price: float = 0.0       # 人民币单价（写下单表 / 审计用）

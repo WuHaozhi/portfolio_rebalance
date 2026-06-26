@@ -35,7 +35,7 @@ from rebalancer import (
     config, default_cny_price, merged_security_pool, normalize_code, normalize_direction,
     read_product_folder, write_orders, write_orders_per_product,
 )
-from rebalancer.engine import clamp_sell_to_holding, round_buy
+from rebalancer.engine import build_fx_map, clamp_sell_to_holding, round_buy
 from rebalancer.excel_io import safe_filename
 from rebalancer import __version__ as APP_VERSION
 
@@ -704,7 +704,7 @@ class ExportDialog(QDialog):
 # 预览/确认对话框（output.png 样式：卖出标黄在前）
 # ---------------------------------------------------------------------------
 class PreviewDialog(QDialog):
-    def __init__(self, parent, result):
+    def __init__(self, parent, result, undone=None):
         super().__init__(parent)
         self.win = parent
         self.result = result
@@ -714,6 +714,16 @@ class PreviewDialog(QDialog):
         lbl = QLabel(f"共 {len(result.orders)} 条交易指令，核对后导出：")
         lbl.setStyleSheet(f"color:{C_TEXT}; font-size:14px; font-weight:600;")
         v.addWidget(lbl)
+
+        # 「未生成下单的标的」硬提示（红字、独立于下方琥珀告警框）：经理一眼看到计划与实际的差额
+        if undone:
+            head = QLabel(f"⚠ 有 {len(undone)} 只计划标的未生成下单，请核对是否漏单：")
+            head.setStyleSheet("color:#ff5d6c; font-size:13px; font-weight:700;")
+            v.addWidget(head)
+            ubox = QTextEdit(); ubox.setReadOnly(True); ubox.setMaximumHeight(84)
+            ubox.setStyleSheet("color:#ff8a93; background:#241317; border:1px solid #5a2a30; border-radius:6px;")
+            ubox.setPlainText("\n".join(f"· {c}（{p}）：{r}" for (p, c, r) in undone))
+            v.addWidget(ubox)
 
         # 每个产品一张表（序号列表头=产品名，与 output.png 一致），多产品之间留空隙
         scroll = QScrollArea(); scroll.setWidgetResizable(True)
@@ -1303,12 +1313,13 @@ class MainWindow(QMainWindow):
                 items.append(StockPoolItem(code=c, name=n, price=p or 0.0, cny_unit_price=p))
         return items
 
-    def _price_of(self, code, product=None):
-        """价格：经理手填的自定义价优先（含对已持仓票的更正），其次按所属产品取文件反推价。"""
+    def _price_of(self, code, product=None, fx_map=None):
+        """价格：经理手填的自定义价优先（含对已持仓票的更正），其次按所属产品取文件反推价。
+        fx_map：每轮 recompute 预算一次的隐含汇率表，避免逐票全量重算。"""
         manual = self._custom_price.get(code)
         if manual is not None:
             return manual
-        return default_cny_price(code, self.products, self.merged, prefer_product=product)
+        return default_cny_price(code, self.products, self.merged, prefer_product=product, fx_map=fx_map)
 
     def _add_stock(self, gnode=None, _checked=False):
         """右键「新增证券」：弹出选股框，一次可勾选多只，全部加入。"""
@@ -1397,6 +1408,7 @@ class MainWindow(QMainWindow):
     def _collect(self):
         """遍历树 -> [(DirectionGroup, [(StockEntry, stock_item)])]。"""
         out = []
+        fx_map = build_fx_map(self.products)   # 每轮算一次隐含汇率，复用给每只票（避免逐票全量重算）
         for i in range(self.tree.topLevelItemCount()):
             pnode = self.tree.topLevelItem(i)
             if pnode.data(0, ROLE_LEVEL) != LV_PRODUCT:
@@ -1418,7 +1430,7 @@ class MainWindow(QMainWindow):
                     if not code:
                         continue
                     e = StockEntry(code=code, name=snode.data(COL_POOL, ROLE_NAME) or "",
-                                   price=self._price_of(code, prod),
+                                   price=self._price_of(code, prod, fx_map=fx_map),
                                    adjust=_to_int(snode.text(COL_ADJUST)))
                     group.stocks.append(e); rows.append((e, snode))
                 out.append((group, rows))
@@ -1454,7 +1466,9 @@ class MainWindow(QMainWindow):
                         snode.setText(COL_SHARES, str(disp) if disp else "0")
                         snode.setForeground(COL_SHARES, QColor(C_TEXT))
                         # 股数为 0 时，把"为何是 0"的原因挂成悬停提示（卖未持有/持仓比例无基准/无价等）
-                        snode.setToolTip(COL_SHARES, "" if disp else gwarn)
+                        # 股数为 0：优先挂"提到本票代码"的那条原因（取整归零/无价/未持有），
+                        # 找不到再退回组首条；避免像旧版那样对归零票显示无关告警或空串。
+                        snode.setToolTip(COL_SHARES, "" if disp else next((x for x in w if e.code in x), gwarn))
                 except Exception as ex:  # noqa: BLE001
                     err = ex
             self._mark_required()      # 标红未填的必填项（仍在 blockSignals 内，避免回环）
@@ -1513,9 +1527,18 @@ class MainWindow(QMainWindow):
             result = build_orders(groups, self.products, self.merged)
         except Exception as exc:  # noqa: BLE001
             QMessageBox.critical(self, "计算失败", f"{exc}\n\n{traceback.format_exc()}"); return
+        # 计划下单的标的 vs 实际进入下单的标的，差集＝未生成下单（无价/不足一手/未持有等）
+        planned, seen = [], set()
+        for g in groups:
+            for s in g.stocks:
+                if s.code and (g.product, s.code) not in seen:
+                    seen.add((g.product, s.code)); planned.append((g.product, s.code))
+        ordered = {(o.product, o.code) for o in result.orders}
+        undone = [(p, c, next((w for w in result.warnings if c in w), "未下单"))
+                  for (p, c) in planned if (p, c) not in ordered]
         # 预览窗常开：导出在窗内进行，导出完不关闭，方便核对/再次导出，由「关闭」收起。
         # 用 scrim 把主窗压暗，让预览窗层次分明。
-        exec_with_scrim(PreviewDialog(self, result), self.centralWidget())
+        exec_with_scrim(PreviewDialog(self, result, undone), self.centralWidget())
 
     def _export_dir(self):
         """上次导出目录（记忆）；失效或没有则用产品文件夹/当前目录。"""

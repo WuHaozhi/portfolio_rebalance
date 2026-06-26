@@ -124,5 +124,6 @@ def write_orders_per_product(orders: list[TradeOrder], folder: str, date: str = 
         path = os.path.join(folder, fname + ".xlsx")
         wb.save(path)
         paths.append(path)
-    assert len(set(paths)) == len(products), "导出文件名去重失败"
+    if len(set(paths)) != len(products):   # 去重逻辑已保证唯一；显式兜底，-O 下仍生效（不用 assert）
+        raise RuntimeError("导出文件名去重失败：存在重名文件，可能互相覆盖")
     return paths

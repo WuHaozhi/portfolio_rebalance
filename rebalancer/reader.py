@@ -38,7 +38,7 @@ def parse_product_name_date(filename: str) -> tuple[str, str]:
     return name, date
 
 
-def _to_float(value, percent: bool = False) -> Optional[float]:
+def _to_float(value, percent: bool = False, unit_suffix: bool = True) -> Optional[float]:
     """尽力把单元格值转为 float，'-'/None/空 视为 None。
 
     percent=True 时（仅「持仓权重」列）才把结尾 % 当百分比除以 100；其余列遇到结尾 %
@@ -66,8 +66,9 @@ def _to_float(value, percent: bool = False) -> Optional[float]:
     mult = 1.0                                    # 值级量级单位：'3.5万'→×1e4、'2亿'→×1e8
     m = re.search(r"(亿|万)$", s)
     if m:
-        mult = 1e8 if m.group(1) == "亿" else 1e4
-        s = s[:-1]
+        s = s[:-1]                                # 始终剥离单位字（否则 float 解析失败）
+        if unit_suffix:                           # 表头已带单位(万元/亿元)时禁用，避免双重放大
+            mult = 1e8 if m.group(1) == "亿" else 1e4
     try:
         f = float(s) * mult
     except ValueError:
@@ -191,9 +192,11 @@ def read_product_file(path: str) -> Product:
         return r[i]
 
     def fnum(r, field):
-        """读数值并按列单位倍率还原（市值/价格/数量）。"""
-        v = _to_float(cell(r, field))
-        return v * col_scale.get(field, 1.0) if v is not None else None
+        """读数值并按列单位倍率还原（市值/价格/数量）。
+        表头已带单位（万元/亿元）时禁用值级「万/亿」解析，避免与表头倍率双重放大。"""
+        scale = col_scale.get(field, 1.0)
+        v = _to_float(cell(r, field), unit_suffix=(scale == 1.0))
+        return v * scale if v is not None else None
 
     n_guessed = 0
     current_category = ""

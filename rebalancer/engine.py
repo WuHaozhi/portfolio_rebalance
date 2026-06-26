@@ -71,8 +71,8 @@ def normalize_code(raw) -> tuple[str, bool]:
             return d + ".SH", True
         if p3 in ("110", "111", "113", "118", "120", "122"):
             return d + ".SH", True             # 沪市可转债
-        if p2 in ("00", "30", "15", "16", "18") or p3 in ("123", "127", "128"):
-            return d + ".SZ", True             # 深市股票/创业板/基金/深市可转债
+        if p2 in ("00", "20", "30", "15", "16", "18") or p3 in ("123", "127", "128", "131"):
+            return d + ".SZ", True             # 深市股票/B股(200)/创业板/基金/可转债/回购(131)
         if d[0] in "48":                       # 北交所
             return d + ".BJ", True
         return d + ".SH", True
@@ -98,15 +98,17 @@ def build_fx_map(products: list[Product]) -> dict[str, float]:
 
 def default_cny_price(code: str, products: list[Product],
                       merged: Optional[list[StockPoolItem]] = None,
-                      prefer_product: Optional[Product] = None) -> Optional[float]:
+                      prefer_product: Optional[Product] = None,
+                      fx_map: Optional[dict[str, float]] = None) -> Optional[float]:
     """某标的的默认人民币单价（用于 UI 自动填价）。
 
     优先级：任一产品持仓反推(持仓市值/数量) > 合并池中的人民币单价 >
             公允价格×隐含汇率。找不到返回 None（由 UI 让用户手填）。
     prefer_product：取价时优先用「请求所属产品」自身的反推价/公允价，
             避免多产品共持同一标的（如 00700.HK）时误用了别的产品的价与隐含汇率。
+    fx_map：预先算好的隐含汇率表（避免每只票都全量 build_fx_map）；不传则内部计算。
     """
-    fx = build_fx_map(products)
+    fx = fx_map if fx_map is not None else build_fx_map(products)
     ordered = list(products)
     if prefer_product is not None:
         ordered = [prefer_product] + [p for p in ordered if p is not prefer_product]
@@ -299,8 +301,7 @@ def _group_weights(group: DirectionGroup, method: str,
                 f"{group.label()}：方式为「当前持仓比例」但组内当前无正持仓市值，"
                 f"无法分配，已跳过该组（如需建仓请改用「等金额」）")
             return None, warns
-        weights = [mv / total for mv in mvs]
-        assert abs(sum(weights) - 1.0) < 1e-6, "权重之和应为1"
+        weights = [mv / total for mv in mvs]   # 各权重 = mv/total，和恒为 1
         return weights, warns
     # 等金额
     return [1.0 / n] * n, warns
@@ -338,22 +339,42 @@ def compute_group_shares(group: DirectionGroup,
         return warns, False
 
     is_buy = normalize_direction(group.direction) == config.DIR_BUY
+    lost = 0.0          # 完全未投的份额金额（无价/取整归零/未持有）—— 供金额守恒汇总
+    lost_n = 0
     for s, w in zip(group.stocks, weights):
+        alloc = group.amount * w
         if not s.price or s.price <= 0:
             s.shares = 0
             warns.append(f"{group.label()}：{s.code} 无有效价格，无法算股数（请填价格）")
+            lost += alloc; lost_n += 1
             continue
-        alloc = group.amount * w
         raw = alloc / s.price
         if is_buy:
             s.shares = round_buy(raw, s.code, product)
+            if s.shares == 0 and raw > 0:        # 取整归零：分得金额不足一手；不告警会静默丢单
+                _, min_buy = lot_rule(s.code, product)
+                warns.append(
+                    f"{group.label()}：{s.code} 分得约 {alloc:,.0f} 元（约 {raw:.1f} 股），"
+                    f"不足最小买入量 {min_buy} 股，未下单")
+                lost += alloc; lost_n += 1
         else:
             cur = product.get(s.code).quantity if (product and product.get(s.code)) else 0.0
             if cur <= 0:
                 s.shares = 0
                 warns.append(f"{group.label()}：{s.code} 当前未持有，无法卖出")
+                lost += alloc; lost_n += 1
                 continue
             s.shares = round_sell(raw, cur, s.code, product)
+            if s.shares == 0 and raw > 0:        # 拟卖不足一手且非清仓；不告警会静默丢单
+                step = lot_rule(s.code, product)[0]
+                warns.append(
+                    f"{group.label()}：{s.code} 拟卖约 {raw:.0f} 股，不足一手（{step} 股）未下单"
+                    f"（如需卖出零股，请在「调整」列手填卖出数）")
+                lost += alloc; lost_n += 1
+    if lost_n and group.amount:                  # 金额守恒汇总：这部分份额不会自动重分配给其他标的
+        warns.append(
+            f"{group.label()}：约 {lost:,.0f} 元（{lost_n} 只标的）因无价/不足一手/未持有未能"
+            f"{'买入' if is_buy else '卖出'}，该部分金额不会自动重分配给其他标的，请核对")
     return warns, True
 
 
@@ -384,8 +405,9 @@ def build_orders(groups: list[DirectionGroup], products: list[Product],
 
     for group in groups:
         product = products_by_name.get(group.product)
-        if product is None and group.product:
-            result.warnings.append(f"{group.label()}：找不到产品「{group.product}」，已跳过该组")
+        if product is None:        # 含产品名为空字符串：引擎自我防御，不产出孤儿订单
+            who = f"找不到产品「{group.product}」" if group.product else "未指定产品"
+            result.warnings.append(f"{group.label()}：{who}，已跳过该组")
             continue
 
         warns, ok = compute_group_shares(group, product)
